@@ -17,7 +17,7 @@ from huggingface_hub import InferenceClient
 userQuestion = input("Question: ")
 client = InferenceClient(
     "meta-llama/Meta-Llama-3-8B-Instruct",
-    token="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",
+    token="hf_xxxxxxxxxxxxxxxxxxxxxxxx",
 )
 
 for message in client.chat_completion(
