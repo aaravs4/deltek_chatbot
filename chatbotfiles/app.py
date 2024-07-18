@@ -7,22 +7,25 @@ from langchain_community.document_loaders import WebBaseLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain.vectorstores import FAISS
 from langchain.embeddings import HuggingFaceBgeEmbeddings
+from sentence_transformers import SentenceTransformer
+from sklearn.metrics.pairwise import cosine_similarity
 
 
 question_answerer = pipeline("question-answering", model='distilbert-base-uncased-distilled-squad')
 pipe = pipeline("text-generation", model="TinyLlama/TinyLlama-1.1B-Chat-v1.0", torch_dtype=torch.bfloat16, device_map="auto")
+model = SentenceTransformer('all-MiniLM-L6-v2') ##smaller but faster embedding model
 
 ##open source embedding model
-model_name = "BAAI/bge-large-en-v1.5"
-model_kwargs = {'device': 'cpu'}
-encode_kwargs = {'normalize_embeddings': True} # set True to compute cosine similarity
+# model_name = "BAAI/bge-large-en-v1.5"
+# model_kwargs = {'device': 'cpu'}
+# encode_kwargs = {'normalize_embeddings': True} # set True to compute cosine similarity
 
-embeddings = HuggingFaceBgeEmbeddings(
-    model_name=model_name,
-    model_kwargs=model_kwargs,
-    encode_kwargs=encode_kwargs,
-    query_instruction= 'Generate a representation for this sentence that can be used to retrieve related sentences:'
-)
+# embeddings = HuggingFaceBgeEmbeddings(
+#     model_name=model_name,
+#     model_kwargs=model_kwargs,
+#     encode_kwargs=encode_kwargs,
+#     query_instruction= 'Generate a representation for this sentence that can be used to retrieve related sentences:'
+# )
 
 bs4_strainer = bs4.SoupStrainer(class_=("main-content"))
 loader = WebBaseLoader(
@@ -35,6 +38,7 @@ text_splitter = RecursiveCharacterTextSplitter(
     chunk_size=1000, chunk_overlap=200, add_start_index=True
 )
 all_splits = text_splitter.split_documents(docs)
+all_splits_text = [split.page_content for split in all_splits]
 
 
 
@@ -45,12 +49,25 @@ class userinput(BaseModel):
 class response(BaseModel):
     answer: str
 
-def getDocs(query, all_splits, embeddings):
-    db = FAISS.from_documents(all_splits, embeddings)
+# def getDocs(query, all_splits, embeddings):
+#     db = FAISS.from_documents(all_splits, embeddings)
 
-    ##get relevant docs from vectorstore
-    relevant_docs = db.similarity_search(query, k = 5)
-    formatted_docs = '\n'.join(doc.page_content for doc in relevant_docs)
+#     ##get relevant docs from vectorstore
+#     relevant_docs = db.similarity_search(query, k = 5)
+#     formatted_docs = '\n'.join(doc.page_content for doc in relevant_docs)
+#     return formatted_docs
+
+def getDocsfaster(query, all_splits_text, model):
+    doc_embeddings = model.encode(all_splits_text)
+    query_embeddings = model.encode(query)
+    results = cosine_similarity(doc_embeddings, query_embeddings.reshape(1,-1)).reshape((-1,))
+    ixs = results.argsort()
+    ixs = ixs[::-1]
+    relevant_docs = []
+
+    for i in ixs:
+        relevant_docs.append(all_splits[i].page_content)
+    formatted_docs = "\n\n".join(doc for doc in relevant_docs)
     return formatted_docs
 
 def getoutput(query, context):
@@ -61,9 +78,6 @@ def getoutput(query, context):
 def hello():
     return "hello"
 
-
-
-
 @app.post("/generate", response_model=response)
 async def generate_something(query: userinput):
     query = query.input
@@ -71,7 +85,7 @@ async def generate_something(query: userinput):
     if not query:
         raise HTTPException(status_code=400, detail="Query is required")
     
-    context = getDocs(query, all_splits, embeddings)
+    context = getDocsfaster(query, all_splits_text, model)
     output = getoutput(query, context)
     return(response(answer=output))
 
