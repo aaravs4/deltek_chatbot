@@ -61,6 +61,9 @@ def getoutput(query, context):
 def hello():
     return "hello"
 
+
+
+
 @app.post("/generate", response_model=response)
 async def generate_something(query: userinput):
     query = query.input
