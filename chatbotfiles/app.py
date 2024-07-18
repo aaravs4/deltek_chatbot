@@ -57,7 +57,7 @@ class response(BaseModel):
 #     formatted_docs = '\n'.join(doc.page_content for doc in relevant_docs)
 #     return formatted_docs
 
-def getDocsfaster(query, all_splits_text, model):
+def getDocsfaster(query, all_splits_text, model, k):
     doc_embeddings = model.encode(all_splits_text)
     query_embeddings = model.encode(query)
     results = cosine_similarity(doc_embeddings, query_embeddings.reshape(1,-1)).reshape((-1,))
@@ -67,12 +67,26 @@ def getDocsfaster(query, all_splits_text, model):
 
     for i in ixs:
         relevant_docs.append(all_splits[i].page_content)
+    relevant_docs = relevant_docs[:k]
     formatted_docs = "\n\n".join(doc for doc in relevant_docs)
     return formatted_docs
 
 def getoutput(query, context):
     result = question_answerer(question= query, context=context)
     return result['answer']
+
+def getoutputTinyLlama(query, context):
+    messages = [
+        {
+            "role": "system",
+            "content": f"You are a friendly chatbot who responds about queries related to Deltek from {context}. You will not make up answers."
+        },
+        {"role": "user", "content": query},
+    ]
+    prompt = pipe.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+    outputs = pipe(prompt, max_new_tokens=256, do_sample=True, temperature=0.7, top_k=50, top_p=0.95)
+    start_out = len(prompt)
+    return outputs[0]["generated_text"][start_out:]
 
 @app.get("/")
 def hello():
@@ -85,8 +99,8 @@ async def generate_something(query: userinput):
     if not query:
         raise HTTPException(status_code=400, detail="Query is required")
     
-    context = getDocsfaster(query, all_splits_text, model)
-    output = getoutput(query, context)
+    context = getDocsfaster(query, all_splits_text, model, k = 5)
+    output = getoutputTinyLlama(query, context)
     return(response(answer=output))
 
 # if __name__ == "__main__":
