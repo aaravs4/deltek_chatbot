@@ -14,4 +14,4 @@ url = "http://127.0.0.1:8000/generate"
 if(button):
     response = requests.post(url = url, json = {"input": query})
     answer = response.json()
-    st.text_area(label = 'Chatbot: ', value = answer['answer'])
+    st.text_area(label = 'Answer: ', value = answer['answer'])
