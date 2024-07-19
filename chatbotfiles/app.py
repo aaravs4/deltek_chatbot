@@ -68,7 +68,7 @@ def getDocsfaster(query, all_splits_text, model, k):
     for i in ixs:
         relevant_docs.append(all_splits[i].page_content)
     relevant_docs = relevant_docs[:k]
-    formatted_docs = "\n\n".join(doc for doc in relevant_docs)
+    formatted_docs = "\n".join(doc for doc in relevant_docs)
     return formatted_docs
 
 def getoutput(query, context):
@@ -84,7 +84,7 @@ def getoutputTinyLlama(query, context):
         {"role": "user", "content": query},
     ]
     prompt = pipe.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-    outputs = pipe(prompt, max_new_tokens=256, do_sample=True, temperature=0.7, top_k=50, top_p=0.95)
+    outputs = pipe(prompt, max_new_tokens=128, do_sample=True, temperature=0.7, top_k=50, top_p=0.95)
     start_out = len(prompt)
     return outputs[0]["generated_text"][start_out:]
 
@@ -100,7 +100,7 @@ async def generate_something(query: userinput):
         raise HTTPException(status_code=400, detail="Query is required")
     
     context = getDocsfaster(query, all_splits_text, model, k = 5)
-    output = getoutputTinyLlama(query, context)
+    output = getoutput(query, context)
     return(response(answer=output))
 
 # if __name__ == "__main__":
