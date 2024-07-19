@@ -20,6 +20,10 @@ from langchain.vectorstores import FAISS
 from langchain.embeddings import HuggingFaceBgeEmbeddings
 from langchain_community.embeddings import HuggingFaceBgeEmbeddings
 
+
+import streamlit as st
+import requests
+
 #small open source llm
 pipe = pipeline("text-generation", model="TinyLlama/TinyLlama-1.1B-Chat-v1.0", torch_dtype=torch.bfloat16, device_map="auto")
 
@@ -108,6 +112,26 @@ async def new_query(query_request: QueryRequest):
     results.append(result)
     return result
 
+
+api_url = 'http://localhost:5000/api/response'
+
+st.title("Deltek Chatbot")
+
+query = st.text_input("Enter your question:")
+
+if st.button("Send"):
+    if query:
+        response = requests.post(api_url, json={"query": query})
+        
+        if response.status_code == 200:
+            result = response.json()
+            st.write(f"**Response:** {result['response']}")
+        else:
+            st.write("Error: Try again")
+    else:
+        st.write("Please enter a query.")
+
 if __name__ == '__main__':
     import uvicorn
     uvicorn.run(app, host='localhost', port=5000)
+    
