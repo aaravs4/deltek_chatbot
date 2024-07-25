@@ -8,6 +8,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 
+
 class document_processer:
     def __init__(self, urls):
         self.model = SentenceTransformer('all-MiniLM-L6-v2') 
