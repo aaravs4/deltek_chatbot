@@ -5,106 +5,81 @@ import torch
 import bs4
 from langchain_community.document_loaders import WebBaseLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain.vectorstores import FAISS
-from langchain.embeddings import HuggingFaceBgeEmbeddings
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 
+class document_processer:
+    def __init__(self, urls):
+        self.model = SentenceTransformer('all-MiniLM-L6-v2') 
+        self.bs4_strainer = bs4.SoupStrainer(class_=("main-content"))
+        self.loader = WebBaseLoader(
+            # web_paths=("https://deltek.com/en","https://www.deltek.com/en/about/contact-us", "https://www.deltek.com/en/small-business", "https://www.deltek.com/en/customers",
+            #         "https://www.deltek.com/en/support", "https://www.deltek.com/en/partners"),
+            web_paths = urls,
+            bs_kwargs={"parse_only": self.bs4_strainer},
+        )
+        self.docs = self.loader.load()
+        self.text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=1000, chunk_overlap=200, add_start_index=True
+        )
+        self.all_splits = self.text_splitter.split_documents(self.docs)
+        self.all_splits_text = [split.page_content for split in self.all_splits]
+    def getDocsfaster(self, query, k):
+        doc_embeddings = self.model.encode(self.all_splits_text)
+        query_embeddings = self.model.encode(query)
+        results = cosine_similarity(doc_embeddings, query_embeddings.reshape(1,-1)).reshape((-1,))
+        ixs = results.argsort()
+        ixs = ixs[::-1]
+        relevant_docs = []
+        for i in ixs:
+            relevant_docs.append(self.all_splits[i].page_content)
+        relevant_docs = relevant_docs[:k]
+        formatted_docs = "\n".join(doc for doc in relevant_docs)
+        return formatted_docs
+            
+class query_processor:
+    def __init__(self):
+        self.question_answerer = pipeline("question-answering", model='distilbert-base-uncased-distilled-squad')
+        self.pipe = pipeline("text-generation", model="TinyLlama/TinyLlama-1.1B-Chat-v1.0", torch_dtype=torch.bfloat16, device_map="auto")
+    def getoutput(self, query, context):
+        result = self.question_answerer(question= query, context=context)
+        return result['answer']
 
-question_answerer = pipeline("question-answering", model='distilbert-base-uncased-distilled-squad')
-pipe = pipeline("text-generation", model="TinyLlama/TinyLlama-1.1B-Chat-v1.0", torch_dtype=torch.bfloat16, device_map="auto")
-model = SentenceTransformer('all-MiniLM-L6-v2') ##smaller but faster embedding model
+class chatapp:
+    def __init__(self):
+        self.app = FastAPI()
+        self.document_processor = document_processer(("https://deltek.com/en","https://www.deltek.com/en/about/contact-us", "https://www.deltek.com/en/small-business", "https://www.deltek.com/en/customers",
+                    "https://www.deltek.com/en/support", "https://www.deltek.com/en/partners"))
+        self.query_processor = query_processor()
+    
+    def getendpoints(self):
+        @self.app.get("/")
+        def hello():
+            return "hello"
 
-##open source embedding model
-# model_name = "BAAI/bge-large-en-v1.5"
-# model_kwargs = {'device': 'cpu'}
-# encode_kwargs = {'normalize_embeddings': True} # set True to compute cosine similarity
+        @self.app.post("/generate", response_model=response)
+        async def generate_something(query: userinput):
+            query = query.input
+            context = self.document_processor.getDocsfaster(query, k = 5)
+            output = self.query_processor.getoutput(query, context)
+            return(response(answer=output))
 
-# embeddings = HuggingFaceBgeEmbeddings(
-#     model_name=model_name,
-#     model_kwargs=model_kwargs,
-#     encode_kwargs=encode_kwargs,
-#     query_instruction= 'Generate a representation for this sentence that can be used to retrieve related sentences:'
-# )
-
-bs4_strainer = bs4.SoupStrainer(class_=("main-content"))
-loader = WebBaseLoader(
-    web_paths=("https://deltek.com/en","https://www.deltek.com/en/about/contact-us", "https://www.deltek.com/en/small-business", "https://www.deltek.com/en/customers",
-            "https://www.deltek.com/en/support", "https://www.deltek.com/en/partners"),
-    bs_kwargs={"parse_only": bs4_strainer},
-)
-docs = loader.load()
-text_splitter = RecursiveCharacterTextSplitter(
-    chunk_size=1000, chunk_overlap=200, add_start_index=True
-)
-all_splits = text_splitter.split_documents(docs)
-all_splits_text = [split.page_content for split in all_splits]
-
-
-
-app = FastAPI()
 
 class userinput(BaseModel):
     input: str
 class response(BaseModel):
     answer: str
 
-# def getDocs(query, all_splits, embeddings):
-#     db = FAISS.from_documents(all_splits, embeddings)
+mainapp = chatapp()
+app = mainapp.app
+mainapp.getendpoints()
 
-#     ##get relevant docs from vectorstore
-#     relevant_docs = db.similarity_search(query, k = 5)
-#     formatted_docs = '\n'.join(doc.page_content for doc in relevant_docs)
-#     return formatted_docs
 
-def getDocsfaster(query, all_splits_text, model, k):
-    doc_embeddings = model.encode(all_splits_text)
-    query_embeddings = model.encode(query)
-    results = cosine_similarity(doc_embeddings, query_embeddings.reshape(1,-1)).reshape((-1,))
-    ixs = results.argsort()
-    ixs = ixs[::-1]
-    relevant_docs = []
 
-    for i in ixs:
-        relevant_docs.append(all_splits[i].page_content)
-    relevant_docs = relevant_docs[:k]
-    formatted_docs = "\n".join(doc for doc in relevant_docs)
-    return formatted_docs
 
-def getoutput(query, context):
-    result = question_answerer(question= query, context=context)
-    return result['answer']
 
-def getoutputTinyLlama(query, context):
-    messages = [
-        {
-            "role": "system",
-            "content": f"You are a friendly chatbot who responds about queries related to Deltek from {context}. You will not make up answers."
-        },
-        {"role": "user", "content": query},
-    ]
-    prompt = pipe.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-    outputs = pipe(prompt, max_new_tokens=128, do_sample=True, temperature=0.7, top_k=50, top_p=0.95)
-    start_out = len(prompt)
-    return outputs[0]["generated_text"][start_out:]
 
-@app.get("/")
-def hello():
-    return "hello"
 
-@app.post("/generate", response_model=response)
-async def generate_something(query: userinput):
-    query = query.input
-    
-    if not query:
-        raise HTTPException(status_code=400, detail="Query is required")
-    
-    context = getDocsfaster(query, all_splits_text, model, k = 5)
-    output = getoutput(query, context)
-    return(response(answer=output))
 
-# if __name__ == "__main__":
-#     import uvicorn
-#     uvicorn.run(app, host="0.0.0.0", port=8000)
 
 
