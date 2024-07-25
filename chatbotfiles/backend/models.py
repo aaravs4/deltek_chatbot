@@ -9,8 +9,7 @@ from pydantic import BaseModel
 
 
 
-connection_string = 'Driver={ODBC Driver 18 for SQL Server};Server=tcp:mysqlserverfordeltek.database.windows.net,1433;Database=auth_database;Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30'
-
+connection_string = ''
 
 # class User(Base):
 #     __tablename__ = "users"
