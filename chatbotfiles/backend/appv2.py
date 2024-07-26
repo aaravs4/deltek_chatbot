@@ -16,10 +16,13 @@ from utils import (
     verify_password
 )
 from fastapi.security import OAuth2PasswordRequestForm
-# from sqlalchemy.orm import Session
-from models import User as DbUser, get_conn
 from deps import get_current_user
-conn = get_conn()
+import sqlite3
+
+conn = sqlite3.connect("data.db")
+conn.close()
+conn = sqlite3.connect("data.db")
+cursor = conn.cursor()
 
 
 
@@ -92,68 +95,59 @@ class chatapp:
             return "hello"
 
         @self.app.post("/generate", response_model=response)
-        async def generate_something(query: userinput, user: DbUser = Depends(get_current_user)):
+        async def generate_something(query: userinput, user: UserOut = Depends(get_current_user)):
             query = query.input
             context = self.document_processor.getDocsfaster(query, k = 5)
             output = self.query_processor.getoutput(query, context)
             return(response(answer=output))
         @self.app.post('/signup', summary="Create new user", response_model=UserOut)
         def create_user(data: UserAuth):
-            # querying database to check if user already exist
-            # user = db.query(DbUser).filter(DbUser.email == data.email).first()
-            # if user is not None:
-            #         raise HTTPException(
-            #         status_code=status.HTTP_400_BAD_REQUEST,
-            #         detail="User with this email already exist"
-            #     )
-            # new_user = DbUser(
-            #     email=data.email,
-            #     password=get_hashed_password(data.password),
-            #     id=str(uuid4())
-            # )
-            # db.add(new_user)
-            # db.commit()
-            # db.refresh(new_user)
-            
+            conn = sqlite3.connect("data.db")
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM Persons WHERE FirstName = ?", data.email)
+            print(data.email)
+            cursor.execute("SELECT * FROM Users_new WHERE username = ?", (data.email,))
 
             row = cursor.fetchone()
             if(row != None):
+                conn.close()
                 raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="User with this email already exist"
                 )
             else:
-                new_user = DbUser(
+                new_user = UserOut(
                     email = data.email,
                     password = get_hashed_password(data.password),
                     id = str(uuid4())
                 )
-                cursor = conn.cursor()
-                cursor.execute(f"INSERT INTO Persons (FirstName, LastName, UserID )VALUES (?, ?, ?)", new_user.email, new_user.password, new_user.id)
+                
+                cursor.execute(f"INSERT INTO Users_new (username, password, id )VALUES (?, ?, ?)", (new_user.email, new_user.password, new_user.id))
                 conn.commit()
+                conn.close()
 
             return new_user
         @self.app.post('/login', summary="Create access and refresh tokens for user", response_model=TokenSchema)
         def login(form_data: OAuth2PasswordRequestForm = Depends()):
             # user = db.query(DbUser).filter(DbUser.email == form_data.username).first()
+            conn = sqlite3.connect("data.db")
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM Persons WHERE FirstName = ?", form_data.username)
+            cursor.execute("SELECT * FROM Users_new WHERE username = ?", (form_data.username,))
             row = cursor.fetchone()
-            
-            if not row or not verify_password(form_data.password, row.LastName):
+           
+            if not row or not verify_password(form_data.password, row[1]):
+                conn.close()
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Incorrect email or password"
                 )
-
+            conn.close()
             return {
-                "access_token": create_access_token(row.FirstName),
-                "refresh_token": create_refresh_token(row.LastName),
+                "access_token": create_access_token(row[0]),
+                "refresh_token": create_refresh_token(row[0]),
             }
+        
         @app.get('/me', summary='Get details of currently logged in user', response_model=UserOut)
-        def get_me(user: DbUser = Depends(get_current_user)):
+        def get_me(user: UserOut = Depends(get_current_user)):
             return user
 
 class userinput(BaseModel):

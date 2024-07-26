@@ -4,10 +4,8 @@ from pydantic import BaseModel, ValidationError
 from datetime import datetime
 from typing import List, Optional, Union
 from sqlalchemy.orm import Session
-from models import User as DbUser
-# from dependencies import get_db
 from fastapi.security import OAuth2PasswordBearer
-from models import get_conn, get_db_conn
+import sqlite3
 from utils import (
     ALGORITHM,
     JWT_SECRET_KEY
@@ -51,21 +49,19 @@ async def get_current_user(token: str = Depends(reuseable_oauth)) -> SystemUser:
         )
 
     # user = db.query(DbUser).filter(DbUser.id == token_data.sub).first()
-    conn = get_db_conn()
-    if conn is None:
-        print("No connection")
-        conn = get_conn()
-    
+    conn = sqlite3.connect("data.db")
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM Persons WHERE FirstName = ?", token_data.sub)
+    cursor.execute("SELECT * FROM Users_new WHERE username = ?", (token_data.sub,))
     row = cursor.fetchone()
 
     
     if row is None:
+        conn.close()
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Could not find user",
 
         )
+    conn.close()
         
-    return SystemUser(id=row.UserID, email=row.FirstName, password=row.LastName)
+    return SystemUser(id=row[2], email=row[0], password=row[1])
