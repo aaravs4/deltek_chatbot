@@ -3,7 +3,6 @@ from jose import JWTError, jwt
 from pydantic import BaseModel, ValidationError
 from datetime import datetime
 from typing import List, Optional, Union
-from sqlalchemy.orm import Session
 from fastapi.security import OAuth2PasswordBearer
 import sqlite3
 from utils import (

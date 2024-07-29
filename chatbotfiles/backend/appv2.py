@@ -19,10 +19,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from deps import get_current_user
 import sqlite3
 
-conn = sqlite3.connect("data.db")
-conn.close()
-conn = sqlite3.connect("data.db")
-cursor = conn.cursor()
+
 
 
 
@@ -104,7 +101,7 @@ class chatapp:
         def create_user(data: UserAuth):
             conn = sqlite3.connect("data.db")
             cursor = conn.cursor()
-            print(data.email)
+           
             cursor.execute("SELECT * FROM Users_new WHERE username = ?", (data.email,))
 
             row = cursor.fetchone()

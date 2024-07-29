@@ -63,14 +63,12 @@ if "access_token" not in st.session_state:
             createbutton = st.form_submit_button("Register")
 
         if createbutton:
-            st.write(f"Creating account for {newuser}...")
             code = create(newuser, newpass)
-            st.write(f"API response status code: {code}")
             if code == 200:
-                st.success("Account Created")
+                st.success("Account created")
                 placeholder.empty()  # Clear the registration form
-            else:
-                st.error(f"Error: {code}")
+            elif code == 400:
+                st.error(f"Account already exists ")
 
 if "access_token" in st.session_state:
     protected()
