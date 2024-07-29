@@ -26,13 +26,29 @@ def protected():
         return
     
     st.title('Deltek Chatbot')
+
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+
+            
     url = "http://127.0.0.1:8000/generate"
     query = st.chat_input("Ask me something about Deltek", key = "chat_input")
+    
     if query:
+        with st.chat_message("user"):
+            st.markdown(query)
+        st.session_state.messages.append({"role": "user", "content": query})
+
         headers = {"Authorization": f"Bearer {st.session_state['access_token']}"}
         response = requests.post(url=url, json={"input": query}, headers=headers)
         answer = response.json()
-        st.write(answer['answer'])
+        with st.chat_message("assistant"):
+            st.markdown(answer['answer'])
+        st.session_state.messages.append({"role": "assistant", "content": answer['answer']})
+        # st.write(answer['answer'])
 
 
 placeholder = st.empty()
