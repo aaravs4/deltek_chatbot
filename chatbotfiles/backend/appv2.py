@@ -3,6 +3,7 @@ from fastapi.responses import RedirectResponse
 from uuid import uuid4
 from pydantic import BaseModel
 from transformers import pipeline
+from transformers import AutoTokenizer, AutoModelForCausalLM  
 import torch
 import bs4
 from langchain_community.document_loaders import WebBaseLoader
@@ -18,6 +19,7 @@ from utils import (
 from fastapi.security import OAuth2PasswordRequestForm
 from deps import get_current_user
 import sqlite3
+import re
 
 
 
@@ -58,6 +60,9 @@ class document_processer:
         )
         self.all_splits = self.text_splitter.split_documents(self.docs)
         self.all_splits_text = [split.page_content for split in self.all_splits]
+    def is_complete_sentence(self, sentence):
+        # A complete sentence ends with ., ?, or !
+        return re.match(r'.*[\.\?\!]$', sentence.strip()) is not None
     def getDocsfaster(self, query, k):
         doc_embeddings = self.model.encode(self.all_splits_text)
         query_embeddings = self.model.encode(query)
@@ -68,22 +73,57 @@ class document_processer:
         for i in ixs:
             relevant_docs.append(self.all_splits[i].page_content)
         relevant_docs = relevant_docs[:k]
+
+        # sentences = []
+        # for doc in relevant_docs:
+        #     segments = doc.split('\n')
+        #     for segment in segments:
+        #         # Split each segment into sentences using regex
+        #         segment_sentences = re.split(r'(?<=[.!?]) +', segment)
+        #         # Filter out incomplete sentences
+
+        #         complete_sentences = [sentence for sentence in segment_sentences if self.is_complete_sentence(sentence)]
+        #         sentences.extend(complete_sentences)
+
+
+        # formatted_docs = "\n\n".join(sentence for sentence in sentences)
         formatted_docs = "\n".join(doc for doc in relevant_docs)
         return formatted_docs
+        
             
 class query_processor:
     def __init__(self):
         self.question_answerer = pipeline("question-answering", model='distilbert-base-uncased-distilled-squad')
         self.pipe = pipeline("text-generation", model="TinyLlama/TinyLlama-1.1B-Chat-v1.0", torch_dtype=torch.bfloat16, device_map="auto")
-    def getoutput(self, query, context):
-        result = self.question_answerer(question= query, context=context)
-        return result['answer']
+        self.tokenizer = AutoTokenizer.from_pretrained("llmware/bling-1.4b-0.1")  
+        self.model =  AutoModelForCausalLM.from_pretrained("llmware/bling-1.4b-0.1")  
+    # def getoutput(self, query, context):
+    #     result = self.question_answerer(question= query, context=context)
+    #     return result['answer']
+    def getoutput(self,query, context):
+        entries = {"context": context, 
+          "query":query}
+        new_prompt = "<human>: " + entries["context"] + "\n" + entries["query"] + "\n" + "<bot>:"
+        inputs = self.tokenizer(new_prompt, return_tensors="pt")  
+        start_of_output = len(inputs.input_ids[0])
+        outputs = self.model.generate(
+        inputs.input_ids.to("cpu"),
+        attention_mask=inputs.attention_mask.to("cpu"),
+        eos_token_id=self.tokenizer.eos_token_id,
+        pad_token_id=self.tokenizer.eos_token_id,
+        do_sample=True,
+        temperature=0.3,
+        max_new_tokens=100,
+        )
+        output_text = self.tokenizer.decode(outputs[0][start_of_output:], skip_special_tokens=True, clean_up_tokenization_spaces=True)
+        return output_text
+
 
 class chatapp:
     def __init__(self):
         self.app = FastAPI()
         self.document_processor = document_processer(("https://deltek.com/en","https://www.deltek.com/en/about/contact-us", "https://www.deltek.com/en/small-business", "https://www.deltek.com/en/customers",
-                    "https://www.deltek.com/en/support", "https://www.deltek.com/en/partners"))
+                    "https://www.deltek.com/en/support", "https://www.deltek.com/en/partners", "https://www.deltek.com/en/products"))
         self.query_processor = query_processor()
     
     def getendpoints(self):
@@ -155,6 +195,9 @@ class response(BaseModel):
 mainapp = chatapp()
 app = mainapp.app
 mainapp.getendpoints()
+
+
+
 
 
 
