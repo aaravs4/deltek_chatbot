@@ -1,9 +1,12 @@
-The folder chatbotfiles contains two python scripts that can be used to try the Deltek chatbot. 
- - app.py: loads necessary models and creates an api endpoint which can generate an output given a query
- - streamlit_app.py: creats a simple web page that has an input text box and calls the api endpoint to display the output
+The folder chatbot files contains a backend and frontend folder to use the Deltek chatbot with authentication. 
+ - backend/appv2.py: creates endpoints to use deltek chatbot and authenticate users
+ - frontend: contains scripts to create the chatbot page
+
+
 
  To run on your local server: 
  - see requirements.txt to download necessary packages with pip
- - create a new terminal and run uvicorn app:app --reload
- - create another terminal and run streamlit run streamlit_app.py
- - navigate to browser given by streamlit_app.py 
+ - create a new terminal and run uvicorn appv2:app --reload
+ - make sure data.db is in the same directory as where you are running the app, so the app has access to the     database
+ - create another terminal and run streamlit run web.py
+ - login or create an account
